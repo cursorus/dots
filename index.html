@@ -2,103 +2,96 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slow Particle Army</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>Particle Chaos Math</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
             background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             color: white;
-            font-family: sans-serif;
+            height: 100vh;
         }
 
-        /* Канвас на весь экран под кнопками */
-        #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 1;
+        canvas {
             display: block;
         }
 
-        /* Кнопки поверх всего */
-        .ui-container {
+        /* Центральное поле ввода под числом */
+        .input-overlay {
             position: absolute;
-            bottom: 80px;
-            z-index: 10;
-            display: flex;
-            gap: 120px;
-        }
-
-        .btn-box {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .main-btn {
-            width: 70px;
-            height: 70px;
-            border-radius: 50%;
-            border: 2px solid white;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            font-size: 30px;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: 0.3s;
-        }
-
-        .main-btn:hover {
-            background: white;
-            color: black;
-            transform: scale(1.1);
-        }
-
-        /* Всплывающее окно ввода */
-        .popup {
-            position: absolute;
-            bottom: 90px;
-            background: #222;
-            border: 1px solid white;
-            padding: 10px;
-            border-radius: 10px;
+            top: 65%; /* Под числом */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
             display: none;
             flex-direction: column;
-            gap: 10px;
-            z-index: 20;
+            align-items: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid #444;
         }
 
-        .popup.active { display: flex; }
+        .input-overlay.active {
+            display: flex;
+        }
 
         input {
-            background: #000;
-            border: 1px solid #555;
+            background: #111;
+            border: 1px solid #fff;
             color: white;
-            padding: 8px;
-            width: 80px;
+            padding: 12px;
+            font-size: 18px; /* 16px+ убирает автозум в iOS */
+            width: 150px;
             text-align: center;
+            border-radius: 5px;
             outline: none;
+            margin-bottom: 10px;
         }
 
-        .ok-btn {
+        .confirm-btn {
             background: white;
             color: black;
             border: none;
-            padding: 5px;
-            cursor: pointer;
+            padding: 10px 25px;
             font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        /* Кнопки внизу */
+        .controls {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 100px;
+            z-index: 50;
+        }
+
+        .btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.3s;
+        }
+
+        .btn:hover {
+            border-color: white;
+            background: white;
+            color: black;
         }
 
         .arrow-up::before { content: "▲"; }
@@ -109,195 +102,208 @@
 
     <canvas id="canvas"></canvas>
 
-    <div class="ui-container">
-        <div class="btn-box">
-            <div class="popup" id="pop-sub">
-                <input type="number" id="in-sub" placeholder="Сколько?">
-                <button class="ok-btn" onclick="apply('sub')">ОК</button>
-            </div>
-            <button class="main-btn arrow-down" id="btn-sub" onclick="show('sub')"></button>
-        </div>
+    <div class="input-overlay" id="inputBox">
+        <input type="number" id="valInput" placeholder="Число..." pattern="\d*">
+        <button class="confirm-btn" onclick="applyChange()">ГОТОВО</button>
+    </div>
 
-        <div class="btn-box">
-            <div class="popup" id="pop-add">
-                <input type="number" id="in-add" placeholder="Сколько?">
-                <button class="ok-btn" onclick="apply('add')">ОК</button>
-            </div>
-            <button class="main-btn arrow-up" id="btn-add" onclick="show('add')"></button>
-        </div>
+    <div class="controls">
+        <button class="btn arrow-down" id="btnDown" onclick="openInput('sub')"></button>
+        <button class="btn arrow-up" id="btnUp" onclick="openInput('add')"></button>
     </div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-
-        let currentNumber = 10; // Начнем с 10, чтобы сразу было видно число
-        let particles = [];
-        let bgParticles = [];
-        const DOT_SIZE = 2.5;
-        const SPEED = 0.015; // Очень плавно и медленно
-
+        const MAX_VAL = 9999999999;
+        
         let width, height;
-        let addBtnPos = {x: 0, y: 0};
-        let subBtnPos = {x: 0, y: 0};
+        let currentNum = 10;
+        let particles = [];
+        let mode = 'idle'; // idle, chaos
+        let currentAction = 'add';
+        
+        const DOT_GAP = 6;
+        const SPEED = 0.05;
+        const CHAOS_STRENGTH = 4;
 
         function resize() {
             width = window.innerWidth;
             height = window.innerHeight;
             canvas.width = width;
             canvas.height = height;
-            
-            const b1 = document.getElementById('btn-add').getBoundingClientRect();
-            const b2 = document.getElementById('btn-sub').getBoundingClientRect();
-            addBtnPos = { x: b1.left + 35, y: b1.top + 35 };
-            subBtnPos = { x: b2.left + 35, y: b2.top + 35 };
         }
-
         window.addEventListener('resize', resize);
         resize();
 
         class Particle {
             constructor(x, y, type) {
-                this.x = x;
-                this.y = y;
-                this.tx = x; // Target X
-                this.ty = y; // Target Y
-                this.type = type; // 'text', 'bg', 'orbit', 'dead'
+                this.x = x; this.y = y;
+                this.tx = x; this.ty = y;
+                this.vx = 0; this.vy = 0;
+                this.type = type; // 'text', 'orbit', 'dead'
                 this.angle = Math.random() * Math.PI * 2;
-                this.radius = 50 + Math.random() * 30;
-                this.opacity = (type === 'bg') ? 0.3 : 1;
+                this.orbitRadius = 40 + Math.random() * 15;
             }
 
             update() {
-                if (this.type === 'bg') {
-                    this.x += Math.sin(this.angle) * 0.2;
-                    this.y += Math.cos(this.angle) * 0.2;
-                    this.angle += 0.01;
-                    return true;
-                }
-
                 if (this.type === 'orbit') {
-                    // Кружатся вокруг кнопки Плюс
-                    let ox = addBtnPos.x + Math.cos(this.angle) * this.radius;
-                    let oy = addBtnPos.y + Math.sin(this.angle) * this.radius;
-                    this.x += (ox - this.x) * 0.05;
-                    this.y += (oy - this.y) * 0.05;
-                    this.angle += 0.02;
-                    return true;
-                }
+                    // Кружатся ровно вокруг активной кнопки
+                    const btn = currentAction === 'add' ? document.getElementById('btnUp') : document.getElementById('btnDown');
+                    const r = btn.getBoundingClientRect();
+                    const cx = r.left + r.width / 2;
+                    const cy = r.top + r.height / 2;
 
-                // Движение к цели (текст или уход в кнопку)
-                this.x += (this.tx - this.x) * SPEED;
-                this.y += (this.ty - this.y) * SPEED;
+                    let ox = cx + Math.cos(this.angle) * this.orbitRadius;
+                    let oy = cy + Math.sin(this.angle) * this.orbitRadius;
+                    
+                    this.x += (ox - this.x) * 0.1;
+                    this.y += (oy - this.y) * 0.1;
+                    this.angle += 0.04;
+                } else {
+                    // Движение к цели с эффектом "суеты"
+                    let destX = this.tx;
+                    let destY = this.ty;
+
+                    if (mode === 'chaos' && this.type === 'text') {
+                        destX += (Math.random() - 0.5) * CHAOS_STRENGTH * 10;
+                        destY += (Math.random() - 0.5) * CHAOS_STRENGTH * 10;
+                    }
+
+                    this.x += (destX - this.x) * SPEED;
+                    this.y += (destY - this.y) * SPEED;
+                }
 
                 if (this.type === 'dead' && Math.abs(this.x - this.tx) < 2) return false;
                 return true;
             }
 
             draw() {
-                ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+                ctx.fillStyle = 'white';
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, DOT_SIZE, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
 
-        function getNumberCoords(num) {
-            const tempCanvas = document.createElement('canvas');
-            const tCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = width;
-            tempCanvas.height = height;
+        function getCoords(num) {
+            const tCanvas = document.createElement('canvas');
+            const tCtx = tCanvas.getContext('2d');
+            tCanvas.width = width;
+            tCanvas.height = height;
 
-            tCtx.fillStyle = "white";
-            tCtx.textAlign = "center";
-            tCtx.textBaseline = "middle";
-            tCtx.font = "bold 220px Arial"; // Толстый шрифт
-            tCtx.fillText(num.toString(), width / 2, height / 2 - 40);
+            // Динамический размер шрифта: втискиваем в 90% ширины экрана
+            let fontSize = width / (num.toString().length * 0.7);
+            if (fontSize > 200) fontSize = 200;
 
-            const imgData = tCtx.getImageData(0, 0, width, height).data;
+            tCtx.font = `bold ${fontSize}px Arial`;
+            tCtx.textAlign = 'center';
+            tCtx.textBaseline = 'middle';
+            tCtx.fillText(num.toString(), width / 2, height / 2 - 50);
+
+            const data = tCtx.getImageData(0, 0, width, height).data;
             const coords = [];
-            const step = 7; // Плотность
-
-            for (let y = 0; y < height; y += step) {
-                for (let x = 0; x < width; x += step) {
-                    if (imgData[(y * width + x) * 4 + 3] > 128) {
-                        coords.push({x, y});
-                    }
+            for (let y = 0; y < height; y += DOT_GAP) {
+                for (let x = 0; x < width; x += DOT_GAP) {
+                    if (data[(y * width + x) * 4 + 3] > 128) coords.push({x, y});
                 }
             }
             return coords;
         }
 
-        function morph(newNum) {
-            const newTargets = getNumberCoords(newNum);
-            const currentParticles = particles.filter(p => p.type !== 'dead' && p.type !== 'bg');
+        function openInput(action) {
+            currentAction = action;
+            document.getElementById('inputBox').classList.add('active');
+            document.getElementById('valInput').focus();
+        }
 
-            // Сопоставляем старые точки новым целям
-            const count = Math.min(newTargets.length, currentParticles.length);
-            for (let i = 0; i < count; i++) {
-                currentParticles[i].tx = newTargets[i].x;
-                currentParticles[i].ty = newTargets[i].y;
-                currentParticles[i].type = 'text';
-            }
+        function applyChange() {
+            const val = parseInt(document.getElementById('valInput').value) || 0;
+            document.getElementById('inputBox').classList.remove('active');
+            document.getElementById('valInput').value = '';
 
-            // Если нужно больше точек (Add)
-            if (newTargets.length > currentParticles.length) {
-                for (let i = currentParticles.length; i < newTargets.length; i++) {
-                    const p = new Particle(addBtnPos.x, addBtnPos.y, 'orbit');
-                    p.tx = newTargets[i].x;
-                    p.ty = newTargets[i].y;
-                    particles.push(p);
-                    // Выпускаем из орбиты в строй через секунду
-                    setTimeout(() => p.type = 'text', 1000 + Math.random() * 1500);
+            let nextNum = currentAction === 'add' ? currentNum + val : currentNum - val;
+            if (nextNum < 0) nextNum = 0;
+            if (nextNum > MAX_VAL) nextNum = MAX_VAL;
+
+            const targets = getCoords(nextNum);
+            const active = particles.filter(p => p.type !== 'dead');
+
+            // Включаем суету
+            mode = 'chaos';
+
+            // Если добавляем — создаем "армию" в орбите
+            if (targets.length > active.length) {
+                const diff = targets.length - active.length;
+                for (let i = 0; i < diff; i++) {
+                    particles.push(new Particle(width/2, height, 'orbit'));
                 }
             } 
-            // Если нужно меньше точек (Sub)
-            else if (newTargets.length < currentParticles.length) {
-                for (let i = newTargets.length; i < currentParticles.length; i++) {
-                    currentParticles[i].type = 'dead';
-                    currentParticles[i].tx = subBtnPos.x;
-                    currentParticles[i].ty = subBtnPos.y;
+            // Если отнимаем — лишние уходят в кнопку
+            else if (targets.length < active.length) {
+                const btn = document.getElementById('btnDown').getBoundingClientRect();
+                for (let i = targets.length; i < active.length; i++) {
+                    active[i].type = 'dead';
+                    active[i].tx = btn.left + 30;
+                    active[i].ty = btn.top + 30;
                 }
             }
-            currentNumber = newNum;
+
+            // Ждем пока "суета" и "армия" подействуют, потом строим
+            setTimeout(() => {
+                mode = 'idle';
+                const finalParticles = particles.filter(p => p.type !== 'dead');
+                // Сортировка для плавности перетекания
+                finalParticles.sort((a,b) => a.y - b.y || a.x - b.x);
+                targets.sort((a,b) => a.y - b.y || a.x - b.x);
+
+                for (let i = 0; i < targets.length; i++) {
+                    finalParticles[i].type = 'text';
+                    finalParticles[i].tx = targets[i].x;
+                    finalParticles[i].ty = targets[i].y;
+                }
+                currentNum = nextNum;
+            }, 1500); // 1.5 секунды на "сборы"
         }
 
-        function show(type) {
-            document.getElementById('pop-add').classList.remove('active');
-            document.getElementById('pop-sub').classList.remove('active');
-            document.getElementById('pop-' + type).classList.add('active');
-        }
-
-        function apply(type) {
-            const val = parseInt(document.getElementById('in-' + type).value);
-            if (!isNaN(val)) {
-                let n = (type === 'add') ? currentNumber + val : currentNumber - val;
-                morph(n);
-                document.getElementById('in-' + type).value = '';
-                document.getElementById('pop-' + type).classList.remove('active');
-            }
-        }
-
-        // Инициализация
-        for(let i=0; i<60; i++) bgParticles.push(new Particle(Math.random()*width, Math.random()*height, 'bg'));
-        
-        // Маленькая задержка, чтобы координаты кнопок точно определились
-        setTimeout(() => morph(currentNumber), 200);
+        // Фоновые точки
+        let bgDots = Array.from({length: 50}, () => ({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5
+        }));
 
         function loop() {
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, width, height);
 
-            bgParticles.forEach(p => { p.update(); p.draw(); });
-            
+            // Фон
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            bgDots.forEach(d => {
+                d.x += d.vx; d.y += d.vy;
+                if(d.x < 0 || d.x > width) d.vx *= -1;
+                if(d.y < 0 || d.y > height) d.vy *= -1;
+                ctx.beginPath(); ctx.arc(d.x, d.y, 1.5, 0, Math.PI*2); ctx.fill();
+            });
+
+            // Частицы числа
             particles = particles.filter(p => {
-                const alive = p.update();
-                if (alive) p.draw();
-                return alive;
+                const keep = p.update();
+                if (keep) p.draw();
+                return keep;
             });
 
             requestAnimationFrame(loop);
         }
+
+        // Старт
+        const startCoords = getCoords(currentNum);
+        particles = startCoords.map(c => {
+            const p = new Particle(c.x, c.y, 'text');
+            p.tx = c.x; p.ty = c.y;
+            return p;
+        });
         loop();
 
     </script>
