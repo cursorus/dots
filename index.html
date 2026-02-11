@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dot Number Particles</title>
+    <title>Slow Particle Math</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #000;
+            background-color: #050505; /* Чуть мягче черного */
             color: white;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Courier New', Courier, monospace; /* Более техничный шрифт */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -25,58 +25,62 @@
             z-index: 1;
         }
 
-        /* Интерфейс поверх канваса */
+        /* UI */
         .ui-container {
             position: absolute;
-            bottom: 15%;
+            bottom: 10%;
             z-index: 10;
             display: flex;
-            gap: 40px;
+            gap: 80px; /* Подальше друг от друга */
             align-items: center;
         }
 
         .control-group {
+            position: relative;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
         }
 
         .btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid white;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
-            width: 60px;
-            height: 60px;
+            width: 70px;
+            height: 70px;
             color: white;
-            font-size: 24px;
+            font-size: 20px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
+            transition: all 0.5s ease;
             outline: none;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
         }
 
         .btn:hover {
-            background: white;
-            color: black;
-            transform: scale(1.1);
+            border-color: white;
+            box-shadow: 0 0 20px rgba(255,255,255,0.4);
+            transform: scale(1.05);
         }
 
         .input-popup {
             position: absolute;
-            bottom: 80px; /* Над кнопкой */
-            background: rgba(0, 0, 0, 0.9);
-            border: 1px solid #333;
-            padding: 10px;
+            bottom: 90px;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid #444;
+            padding: 15px;
             border-radius: 8px;
             display: flex;
-            gap: 5px;
+            flex-direction: column;
+            gap: 10px;
             opacity: 0;
             pointer-events: none;
-            transform: translateY(10px);
-            transition: opacity 0.3s, transform 0.3s;
+            transform: translateY(20px);
+            transition: all 0.5s ease;
+            width: 100px;
+            align-items: center;
         }
 
         .input-popup.active {
@@ -86,29 +90,36 @@
         }
 
         input[type="number"] {
-            background: #222;
-            border: 1px solid #444;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid white;
             color: white;
             padding: 5px;
-            border-radius: 4px;
-            width: 80px;
+            width: 100%;
+            text-align: center;
+            font-size: 18px;
+            outline: none;
         }
 
         .confirm-btn {
             background: white;
             color: black;
             border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
+            padding: 8px 15px;
+            border-radius: 20px;
             cursor: pointer;
+            font-size: 12px;
             font-weight: bold;
+            text-transform: uppercase;
+            width: 100%;
+            transition: background 0.3s;
         }
 
         .confirm-btn:hover {
-            background: #ccc;
+            background: #aaa;
         }
 
-        /* Иконки стрелок */
+        /* Иконки */
         .arrow-up::before { content: "▲"; }
         .arrow-down::before { content: "▼"; }
 
@@ -119,20 +130,20 @@
     <canvas id="canvas"></canvas>
 
     <div class="ui-container">
-        <div class="control-group">
+        <div class="control-group" id="group-sub">
             <div class="input-popup" id="popup-sub">
-                <input type="number" id="input-sub" placeholder="Сколько?" min="1">
-                <button class="confirm-btn" onclick="updateNumber('sub')">OK</button>
+                <input type="number" id="input-sub" placeholder="0" min="1">
+                <button class="confirm-btn" onclick="processInput('sub')">Убрать</button>
             </div>
-            <button class="btn arrow-down" onclick="togglePopup('sub')"></button>
+            <button class="btn arrow-down" id="btn-sub" onclick="togglePopup('sub')"></button>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" id="group-add">
             <div class="input-popup" id="popup-add">
-                <input type="number" id="input-add" placeholder="Сколько?" min="1">
-                <button class="confirm-btn" onclick="updateNumber('add')">OK</button>
+                <input type="number" id="input-add" placeholder="0" min="1">
+                <button class="confirm-btn" onclick="processInput('add')">Добавить</button>
             </div>
-            <button class="btn arrow-up" onclick="togglePopup('add')"></button>
+            <button class="btn arrow-up" id="btn-add" onclick="togglePopup('add')"></button>
         </div>
     </div>
 
@@ -141,194 +152,268 @@
         const ctx = canvas.getContext('2d');
 
         let width, height;
-        let currentNumber = 10; // Стартовое число
-        let particles = []; // Массив частиц, образующих число
-        let bgParticles = []; // Фоновые частицы
-        const particleSize = 3; // Размер точки
-        const gap = 7; // Расстояние между точками в цифре (сетка)
+        let currentNumber = 0; 
+        
+        // Массивы
+        let particles = []; 
+        let bgParticles = [];
+        
+        // Настройки
+        const P_SIZE = 2.5; // Размер точки
+        const GAP = 6;      // Плотность сетки (чем меньше, тем больше точек)
+        const SPEED = 0.03; // Коэффициент скорости (чем меньше, тем медленнее) 0.03 - очень плавно
+        
+        // Позиции кнопок (вычисляются)
+        let btnAddPos = { x: 0, y: 0 };
+        let btnSubPos = { x: 0, y: 0 };
 
-        // Инициализация размеров
         function resize() {
             width = window.innerWidth;
             height = window.innerHeight;
             canvas.width = width;
             canvas.height = height;
+            
+            // Находим координаты кнопок для анимации
+            const btnAddRect = document.getElementById('btn-add').getBoundingClientRect();
+            const btnSubRect = document.getElementById('btn-sub').getBoundingClientRect();
+            
+            btnAddPos = { 
+                x: btnAddRect.left + btnAddRect.width / 2, 
+                y: btnAddRect.top + btnAddRect.height / 2 
+            };
+            btnSubPos = { 
+                x: btnSubRect.left + btnSubRect.width / 2, 
+                y: btnSubRect.top + btnSubRect.height / 2 
+            };
         }
         window.addEventListener('resize', resize);
-        resize();
+        // Вызовем resize чуть позже, чтобы DOM прогрузился
+        setTimeout(resize, 100);
 
-        // Класс частицы
+        // --- КЛАСС ЧАСТИЦЫ ---
         class Particle {
             constructor(x, y, type) {
                 this.x = x;
                 this.y = y;
-                this.targetX = x;
-                this.targetY = y;
-                this.vx = 0;
-                this.vy = 0;
-                this.type = type; // 'bg' (фон) или 'number' (цифра) или 'dead' (умирает)
+                this.tx = x; // Target X
+                this.ty = y; // Target Y
                 
-                // Для фоновых
-                if (type === 'bg') {
-                    this.vx = (Math.random() - 0.5) * 1;
-                    this.vy = (Math.random() - 0.5) * 1;
-                }
+                this.type = type; // 'bg', 'text', 'orbit', 'dying'
+                this.orbitAngle = Math.random() * Math.PI * 2; // Угол на орбите
+                this.orbitRadius = 60 + Math.random() * 20;   // Радиус орбиты вокруг кнопки
+                
+                // Для плавного покачивания фона
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
             }
 
             update() {
+                // 1. ФОНОВЫЕ
                 if (this.type === 'bg') {
-                    // Логика фоновых частиц (хаотичное движение)
                     this.x += this.vx;
                     this.y += this.vy;
-
-                    // Отталкивание от границ
                     if (this.x < 0 || this.x > width) this.vx *= -1;
                     if (this.y < 0 || this.y > height) this.vy *= -1;
-                } 
-                else if (this.type === 'number' || this.type === 'dying') {
-                    // Логика частиц цифры (движение к цели)
-                    const dx = this.targetX - this.x;
-                    const dy = this.targetY - this.y;
-                    
-                    // Простое "притягивание" к цели
-                    this.x += dx * 0.08; 
-                    this.y += dy * 0.08;
+                    return true;
+                }
 
-                    // Если частица умирающая (улетает в кнопку) и почти долетела
-                    if (this.type === 'dying' && Math.abs(dx) < 5 && Math.abs(dy) < 5) {
-                        return false; // Удалить частицу
+                // 2. ОРБИТА (новые точки кружатся вокруг кнопки)
+                if (this.type === 'orbit') {
+                    // Цель - точка на окружности вокруг кнопки Add
+                    const targetOrbitX = btnAddPos.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+                    const targetOrbitY = btnAddPos.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+                    
+                    // Плавное приближение к орбите
+                    this.x += (targetOrbitX - this.x) * 0.05;
+                    this.y += (targetOrbitY - this.y) * 0.05;
+                    
+                    // Медленное вращение самой орбиты
+                    this.orbitAngle += 0.02; 
+                    return true;
+                }
+
+                // 3. ТЕКСТ (основной режим) и УМИРАНИЕ
+                const dx = this.tx - this.x;
+                const dy = this.ty - this.y;
+                
+                // Физика плавного прибытия (Easing)
+                this.x += dx * SPEED;
+                this.y += dy * SPEED;
+
+                // Если это умирающая частица и она долетела до кнопки "Вниз"
+                if (this.type === 'dying') {
+                    // Проверка расстояния (если близко - исчезаем)
+                    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) {
+                        return false; // Удалить из массива
                     }
                 }
+
                 return true;
             }
 
             draw() {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, particleSize, 0, Math.PI * 2);
                 ctx.fillStyle = 'white';
-                ctx.fill();
+                
+                if (this.type === 'bg') {
+                    ctx.globalAlpha = 0.3; // Тусклый фон
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.globalAlpha = 1;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, P_SIZE, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
             }
         }
 
-        // Генерация координат точек из текста
+        // --- ГЕНЕРАЦИЯ КООРДИНАТ ТЕКСТА ---
         function getTextCoordinates(text) {
-            // Создаем временный канвас для отрисовки текста
             const tCanvas = document.createElement('canvas');
             const tCtx = tCanvas.getContext('2d');
             tCanvas.width = width;
             tCanvas.height = height;
             
-            // Настройки шрифта
-            let fontSize = 250;
-            // Уменьшаем шрифт, если число очень большое
-            if (text.toString().length > 3) fontSize = 150;
-            if (text.toString().length > 5) fontSize = 100;
+            // Адаптивный шрифт
+            let fontSize = 200;
+            const str = text.toString();
+            if (str.length > 3) fontSize = 140;
+            if (str.length > 5) fontSize = 90;
 
-            tCtx.font = `bold ${fontSize}px Arial`;
-            tCtx.fillStyle = 'white';
+            // Используем шрифт из кругов (просто жирный шрифт, отрисуем точками)
+            tCtx.font = `bold ${fontSize}px Arial`; 
             tCtx.textAlign = 'center';
             tCtx.textBaseline = 'middle';
-            
-            // Рисуем текст по центру
-            tCtx.fillText(text, width / 2, height / 2 - 50);
+            tCtx.fillStyle = 'white';
+            tCtx.fillText(str, width / 2, height / 2 - 80); // Чуть выше центра
 
-            // Сканируем пиксели
             const imageData = tCtx.getImageData(0, 0, width, height).data;
-            const coordinates = [];
+            const coords = [];
 
-            // Проходим по сетке (gap)
-            for (let y = 0; y < height; y += gap) {
-                for (let x = 0; x < width; x += gap) {
-                    const index = (y * width + x) * 4;
-                    // Если пиксель не прозрачный (альфа > 128)
-                    if (imageData[index + 3] > 128) {
-                        coordinates.push({ x, y });
+            // Сканируем
+            for (let y = 0; y < height; y += GAP) {
+                for (let x = 0; x < width; x += GAP) {
+                    const alpha = imageData[(y * width + x) * 4 + 3];
+                    if (alpha > 128) {
+                        coords.push({ x, y });
                     }
                 }
             }
-            return coordinates;
+            return coords;
         }
 
-        // Основная функция смены числа
-        function changeNumber(newVal, actionType) {
-            const oldVal = currentNumber;
-            currentNumber = newVal;
+        // --- УМНОЕ РАСПРЕДЕЛЕНИЕ (Core Logic) ---
+        function morphTo(newNumber) {
+            const targets = getTextCoordinates(newNumber);
+            const activeParticles = particles.filter(p => p.type !== 'dying' && p.type !== 'bg');
+            
+            // Сортируем и частицы, и цели по координатам (Y, затем X)
+            // Это помогает сопоставить левую верхнюю точку с левой верхней целью
+            // Минимизирует "суету"
+            activeParticles.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+            targets.sort((a, b) => (a.y - b.y) || (a.x - b.x));
 
-            // Получаем новые координаты для нового числа
-            const newCoords = getTextCoordinates(currentNumber);
+            const particlesNeeded = targets.length;
+            const particlesAvailable = activeParticles.length;
 
-            // Сценарий 1: Добавление (Увеличение числа)
-            if (newCoords.length > particles.length) {
-                // Переназначаем существующие частицы на новые места
-                for (let i = 0; i < particles.length; i++) {
-                    particles[i].targetX = newCoords[i].x;
-                    particles[i].targetY = newCoords[i].y;
-                    particles[i].type = 'number';
-                }
+            // 1. Обновляем цели для существующих (кто успел, тот и встал)
+            const commonCount = Math.min(particlesNeeded, particlesAvailable);
+            for (let i = 0; i < commonCount; i++) {
+                activeParticles[i].tx = targets[i].x;
+                activeParticles[i].ty = targets[i].y;
+                activeParticles[i].type = 'text'; // Если были 'orbit', станут 'text'
+            }
 
-                // Создаем недостающие частицы
-                const countToAdd = newCoords.length - particles.length;
-                const startX = width / 2 + 60; // Примерно где кнопка "вверх"
-                const startY = height - 100;
-
+            // 2. Если нужно БОЛЬШЕ частиц (Добавление)
+            if (particlesNeeded > particlesAvailable) {
+                const countToAdd = particlesNeeded - particlesAvailable;
+                
                 for (let i = 0; i < countToAdd; i++) {
-                    const p = new Particle(startX + (Math.random() - 0.5) * 50, startY + (Math.random() - 0.5) * 50, 'number');
-                    // Цель - оставшиеся координаты
-                    p.targetX = newCoords[particles.length + i].x;
-                    p.targetY = newCoords[particles.length + i].y;
+                    const targetIndex = particlesAvailable + i;
+                    // Создаем точку прямо в центре кнопки ADD
+                    const p = new Particle(btnAddPos.x, btnAddPos.y, 'orbit');
+                    
+                    // Запоминаем её финальную цель в тексте
+                    // Но пока не говорим ей туда лететь, пусть покружится
+                    // Мы используем хак: tx/ty это конечная цель для текста
+                    // Но в update() для 'orbit' мы игнорируем tx/ty и используем круговую логику
+                    p.tx = targets[targetIndex].x;
+                    p.ty = targets[targetIndex].y;
+                    
                     particles.push(p);
-                }
-            }
-            // Сценарий 2: Вычитание (Уменьшение числа или просто смена формы с меньшим кол-вом точек)
-            else {
-                // Назначаем цели для тех, кто остается
-                for (let i = 0; i < newCoords.length; i++) {
-                    particles[i].targetX = newCoords[i].x;
-                    particles[i].targetY = newCoords[i].y;
-                    particles[i].type = 'number';
-                }
 
-                // Лишние частицы отправляем в кнопку
-                const targetX = (actionType === 'sub') ? width / 2 - 60 : width / 2; // Кнопка вниз
-                const targetY = height - 100;
-
-                for (let i = newCoords.length; i < particles.length; i++) {
-                    particles[i].targetX = targetX;
-                    particles[i].targetY = targetY;
-                    particles[i].type = 'dying'; // Они удалятся, когда долетят
+                    // Таймер: через случайное время (1-2 сек) отправить точку на место
+                    setTimeout(() => {
+                        p.type = 'text'; // Переключаем режим, и она полетит к tx/ty
+                    }, 800 + Math.random() * 1000);
                 }
-            }
-        }
-
-        // Инициализация
-        function init() {
-            // Создаем фоновые частицы
-            for (let i = 0; i < 50; i++) {
-                bgParticles.push(new Particle(Math.random() * width, Math.random() * height, 'bg'));
             }
             
-            // Создаем частицы для стартового числа
-            const coords = getTextCoordinates(currentNumber);
-            coords.forEach(c => {
-                const p = new Particle(c.x, c.y, 'number');
-                particles.push(p);
-            });
+            // 3. Если нужно МЕНЬШЕ частиц (Вычитание)
+            if (particlesNeeded < particlesAvailable) {
+                const countToRemove = particlesAvailable - particlesNeeded;
+                
+                // Берем лишние с конца (те, что справа/снизу)
+                for (let i = 0; i < countToRemove; i++) {
+                    const p = activeParticles[particlesNeeded + i];
+                    p.type = 'dying';
+                    p.tx = btnSubPos.x; // Летим в кнопку SUB
+                    p.ty = btnSubPos.y;
+                }
+            }
+        }
 
+        // --- UI ФУНКЦИИ ---
+
+        function togglePopup(type) {
+            resize(); // Обновить координаты кнопок на всякий случай
+            document.getElementById('popup-add').classList.remove('active');
+            document.getElementById('popup-sub').classList.remove('active');
+            
+            const popup = document.getElementById(`popup-${type}`);
+            if (popup) {
+                popup.classList.add('active');
+                setTimeout(() => document.getElementById(`input-${type}`).focus(), 100);
+            }
+        }
+
+        function processInput(type) {
+            const input = document.getElementById(`input-${type}`);
+            const val = parseInt(input.value);
+            
+            if (!isNaN(val)) {
+                if (type === 'add') currentNumber += val;
+                if (type === 'sub') currentNumber -= val;
+                
+                morphTo(currentNumber);
+                
+                input.value = '';
+                document.getElementById(`popup-${type}`).classList.remove('active');
+            }
+        }
+
+        // --- ИНИЦИАЛИЗАЦИЯ И ЦИКЛ ---
+
+        function init() {
+            // Фон
+            for(let i=0; i<80; i++) {
+                bgParticles.push(new Particle(Math.random()*width, Math.random()*height, 'bg'));
+            }
+            // Первое число
+            morphTo(currentNumber);
             animate();
         }
 
-        // Анимационный цикл
         function animate() {
             ctx.clearRect(0, 0, width, height);
 
-            // Рисуем и обновляем фон
-            bgParticles.forEach(p => {
-                p.update();
-                p.draw();
-            });
+            // Отрисовка фона
+            bgParticles.forEach(p => { p.update(); p.draw(); });
 
-            // Рисуем и обновляем цифры
-            // Фильтруем массив, удаляя мертвые частицы
+            // Отрисовка основных частиц
+            // Фильтруем (удаляем те, что update() вернул false)
             particles = particles.filter(p => {
                 const alive = p.update();
                 if (alive) p.draw();
@@ -338,42 +423,7 @@
             requestAnimationFrame(animate);
         }
 
-        // --- UI Logic ---
-
-        function togglePopup(type) {
-            // Скрыть все
-            document.getElementById('popup-add').classList.remove('active');
-            document.getElementById('popup-sub').classList.remove('active');
-            
-            // Показать нужный
-            const popup = document.getElementById(`popup-${type}`);
-            popup.classList.add('active');
-            
-            // Фокус на инпут
-            setTimeout(() => document.getElementById(`input-${type}`).focus(), 100);
-        }
-
-        function updateNumber(type) {
-            const inputId = `input-${type}`;
-            const val = parseInt(document.getElementById(inputId).value);
-
-            if (!isNaN(val)) {
-                let newNum = currentNumber;
-                if (type === 'add') {
-                    newNum += val;
-                } else {
-                    newNum -= val;
-                }
-                
-                changeNumber(newNum, type);
-                
-                // Очистить и закрыть
-                document.getElementById(inputId).value = '';
-                document.getElementById(`popup-${type}`).classList.remove('active');
-            }
-        }
-
-        // Запуск
+        // Старт
         init();
 
     </script>
